@@ -1,0 +1,489 @@
+#!/usr/bin/env python
+'''
+PyFuncMod
+'''
+
+import numpy as np
+import math
+import scipy.special
+import scipy.misc
+
+pi = np.pi
+
+## Savage 2000
+##-------------------------------------------------------------------------------------------
+def savage_2000_fun(x, y, t, H, relaxation_time, T):
+  '''
+  BROKEN
+  Arguments:
+    x:  distance from fault
+    y:  depth
+    t:  time
+    H:  locking depth
+    relaxation_time: relaxation time of lower halfspace
+    T: period
+  ''' 
+  seconds_in_a_year = 60 * 60 * 24 * 365.25
+  t = seconds_in_a_year * t
+  T = seconds_in_a_year * T
+  eta = relaxation_time*3.2e10*3.155e7
+  mu = 3.2e10
+  tau_0 = (mu * T) / (2 * eta)
+  max_m = 100
+  max_k = 250 / tau_0
+  if (y < H):
+   sum_S_m = 1 / (2 * pi) * ( -np.arctan((H + y) / x) - np.arctan((H - y) / x) + pi * np.sign(x))
+  else:
+   sum_S_m = 1 / (2 * pi) * ( -np.arctan((H + y) / x) - np.arctan((y - H) / x) + pi * np.sign(x))
+  S_m = np.zeros((len(range(1,max_m)),len(x)))
+  C_m = np.zeros(len(range(1,max_m)))
+  for m in range(1,max_m):
+    if (y < H):
+      S_m[m-1, :] = 1 / (2 * pi) * ( np.arctan(((2 * m + 1) * H + y) / x) -\
+                                     np.arctan(((2 * m - 1) * H + y) / x) +\
+                                     np.arctan(((2 * m + 1) * H - y) / x) -\
+                                     np.arctan(((2 * m - 1) * H - y) / x) )
+    else:
+      S_m[m-1, :] = 1 / (2 * pi) * ( np.arctan(((2 * m + 1) * H + y) / x) -\
+                                     np.arctan(((2 * m - 3) * H + y) / x) )
+
+  tau = (mu * t) / (2 * eta)
+  for m in range(1,max_m):
+    sum_k = 0
+    for k in range(int(max_k)):
+      sum_k = sum_k + np.exp(-(tau + k * tau_0)) * np.power((tau + k * tau_0),(m - 1))
+
+    C_m[m-1] = tau_0 / scipy.misc.factorial(m - 1) * sum_k +\
+               scipy.special.gammainc(m, tau + (max_k + 1) * tau_0) / scipy.misc.factorial(m - 1)
+
+  v = np.zeros(len(x))
+  for m in range(1,max_m):
+    v = v + (C_m[m-1] - 1) * S_m[m-1, :]
+
+  v = v + sum_S_m
+  return v
+
+
+##  Elastic-Elastic-Elastic Displacement
+##-------------------------------------------------------------------------------------------
+def EEE_Disp(slip,mu1,h1,mu2,h2,mu3,D,x): 
+  '''      
+  Description:                                                                                                     
+    Three layer elastic displacements from Chinnery and Jovanovich                                                 
+                                                                                                                
+  Arguments:                                                                                                       
+    slip: The total displacement across the fault                                                            
+    mu1:  Shear modulus for layer 1 (which contains the fault)                                                    
+    h1:   Thickness of layer 1                                                                                    
+    mu2:  Shear modulus for layer 2                                                                               
+    h2:   Thickness of layer 2                                                                                    
+    mu3:  Shear modulus for layer 3                                                                               
+    y:    Lateral distance from the fault of output displacements                                                 
+    D:    Locking Depth (down is negative)   
+  '''
+  slip = float(slip)
+  mu1  = float(mu1)
+  h1   = float(h1)
+  mu2  = float(mu2)
+  h2   = float(h2)
+  mu3  = float(mu3)
+  D    = float(D)
+  x    = np.double(x)
+  U    = x * 0
+
+  l_max = 5
+  m_max = 5
+  n_max = 5
+  a1    = (mu2 - mu3) / (mu2 + mu3)
+  a2    = (mu1 - mu2) / (mu1 + mu2)
+  a3    = -1
+  b1    = 2*mu3 / (mu3 + mu2)
+  b2    = 2*mu2 / (mu2 + mu1)
+  b3    = 2
+  d1    = 2*mu2 / (mu3 + mu2)
+  d2    = 2*mu1 / (mu2 + mu1)
+
+  for n in range(n_max):
+    W1    =           np.arctan( (  2*n*h1      + D ) / x )
+    W2    =      a2 * np.arctan( ( -2*(n+1)*h1  - D ) / x )
+    W3    =      a3 * np.arctan( (  2*n*h1      - D ) / x )
+    W4    = a2 * a3 * np.arctan( ( -2*(n+1)*h1  + D ) / x )
+    U     = U - ( pow(-a2*a3,n) * ( W1 - W2 + W3 - W4 ) )
+
+  for l in range(1,l_max):
+    for m in range(m_max):
+      for n in range(n_max):
+        W1    =           np.arctan( (  2*(l+m)*h2  +  2*(l+n)*h1    + D ) / x )
+        W2    =      a2 * np.arctan( ( -2*(l+m)*h2  -  2*(l+n+1)*h1  - D ) / x )
+        W3    =      a3 * np.arctan( (  2*(l+m)*h2  +  2*(l+n)*h1    - D ) / x )
+        W4    = a2 * a3 * np.arctan( ( -2*(l+m)*h2  -  2*(l+n+1)*h1  + D ) / x )
+        Gamma = pow(-a1*a2,m) * pow(-a2*a3,n) * pow(-a1*a3*d2*b2,l) * P(l,m,n)
+        U     = U - Gamma*( W1 - W2 + W3 - W4 )
+
+  for l in range( l_max ):
+    for m in range( m_max ):
+      for n in range( n_max ):
+        W1    =      np.arctan( ( -2*(l+m+1)*h2  -  2*(l+n+1)*h1  -  D ) / x )
+        W2    = a3 * np.arctan( ( -2*(l+m+1)*h2  -  2*(l+n+1)*h1  +  D ) / x )
+        Gamma = a1 * d2 * b2 * pow(-a1*a2,m) * pow(-a2*a3,n) * pow(-a1*a3*d2*b2,l) * Q(l,m,n)
+        U     = U + Gamma*(W1 + W2)
+
+  return ( slip / (2*pi) ) * U
+
+##  Elastic-Maxwell Displacement
+##-------------------------------------------------------------------------------------------
+def EM_Disp(slip,tau,D,x,t):
+  '''
+  Description:
+    Displacements for a 2D elastic-maxwell model with one rupture
+
+  Arguments:
+    slip: The total displacement across the fault
+     tau: Relaxation time of maxwell lower halfspace
+       x: Distances from the fault 
+       t: Time since the rupture (Unstable at ~15*tau)
+  '''
+  slip   = float(slip)
+  tau    = float(tau)
+  D      = float(D)
+  t      = float(t)
+  x      = np.double(x)
+  N      = 20
+  U      = ( slip / (2*pi) ) * W_EE(0,D,x)
+  for n in range(1,N+1):
+    C    = 0
+    for i in range(1,n+1):
+      C += L(n,i) * W_EE(i,D,x)
+    U   += ( slip / pi ) * pow(t/(2*tau),n) * C / math.factorial(n)  
+
+  return U
+
+##  Elastic-Maxwell Velocity
+##-------------------------------------------------------------------------------------------
+def EM_Vel(slip,tau,D,x,t):
+  '''
+  Description:
+    Velocities for a 2D elastic-maxwell model with one rupture
+
+  Arguments:
+    slip: The total displacement across the fault
+     tau: Relaxation time of maxwell lower halfspace
+       x: Distances from the fault 
+       t: Time since the rupture (Unstable at ~15*tau)
+  '''
+  slip   = float(slip)
+  tau    = float(tau)
+  D      = float(D)
+  t      = float(t)
+  x      = np.double(x)
+  U      = x * 0
+  N      = 20
+  for n in range(1,N+1):
+    C    = 0
+    for i in range(1,n+1):
+      C += L(n,i) * W_EE(i,D,x)
+    U   += ( slip / pi ) * pow(t,n-1) * pow(2*tau,-n) * C / math.factorial(n - 1)  
+
+  return U
+
+##  Elastic-Maxwell-Maxwell Initial Velocity
+##-------------------------------------------------------------------------------------------
+def EMM_Vel(slip,h1,h2,tau2,tau3,D,x):
+  '''
+  Description:
+    Initial velocities for a 2D elastic-maxwell-maxwell model
+    with one rupture
+  
+  Arguments:
+    slip: The total slip across the fault
+      h1: Thickness of the top elastic layer
+      h2: Thickness of the uppermost maxwell layer
+    tau2: Relaxation time of the uppermost maxwell layer
+    tau3: Relaxation time of the lower maxwell halfspace
+       D: Locking depth (down is negative)
+       x: Distances from the fault
+  '''
+  slip = float(slip)
+  h1   = float(h1)
+  h2   = float(h2)
+  tau2 = float(tau2)
+  tau3 = float(tau3)
+  D    = float(D)
+  x    = np.double(x)
+  W1   =  1.0/tau2              *  W_EEE( 0, 2,h2,h1,x,D)
+  W2   = (1.0/tau3 - 1.0/tau2)  *  W_EEE( 2, 2,h2,h1,x,D)
+
+  return slip/(2*pi) * (-W1 - W2)
+
+##  Elastic-Maxwell-Maxwell Initial Velocity
+##-------------------------------------------------------------------------------------------
+def EME_Vel(slip,h1,h2,tau,D,x):
+  '''
+  Description:
+    Initial velocities for a 2D elastic-maxwell-elastic model
+    with one rupture
+  
+  Arguments:
+    slip: The total slip across the fault
+      h1: Thickness of the top elastic layer
+      h2: Thickness of the maxwell layer
+     tau: Relaxation time of the maxwell layer
+       D: Locking depth (down is negative)
+       x: Distances from the fault
+  '''
+  slip = float(slip)
+  h1   = float(h1)
+  h2   = float(h2)
+  tau  = float(tau)
+  D    = float(D)
+  x    = np.array(x)
+  W1   =  1.0/(tau)  *  W_EEE( 0, 2,h2,h1,x,D)
+  W2   = -1.0/(tau)  *  W_EEE( 2, 2,h2,h1,x,D)
+
+  return slip/(2*pi) * (-W1 - W2)
+
+##  Elastic-Maxwell n Layered Initial Velocity
+##-------------------------------------------------------------------------------------------
+def EMn_Vel(slip,hbot_lst,tau_lst,D,x):
+  '''
+  Description:
+    Initial velocities for a 2D model with an elastic layer
+    over an arbitarily layered maxwell lower halfspace.
+  
+  Arguments:
+        slip: The total slip across the fault
+    hbot_lst: List of the bottoms of each maxwell layer
+              (down is negative)
+     tau_lst: List of relaxation times for each maxwell layer
+           D: Locking depth (down is negative)
+           x: Distances from the fault
+  '''
+  slip     = float(slip)
+  hbot_lst = np.double(hbot_lst)
+  tau_lst  = np.double(tau_lst)
+  x        = np.array(x)
+  U        = np.array(x) * 0
+  htop     = D
+  for idx,hbot in enumerate(hbot_lst):
+    del_h  = htop - hbot
+    tau    = tau_lst[idx]
+    U     += EME_Vel(slip,-htop,del_h,tau,D,x)
+    htop   = hbot   
+  return U
+
+## Elastic-Maxwell Continous Tau Initial Velocity
+##-------------------------------------------------------------------------------------------
+def EM_Cont_Vel(slip,h_lst,tau_lst,D,x):
+  '''
+  Description:
+    Initial velocities for a 2D model with an elastic layer
+    over a maxwell layer with tau varying as a function of h
+  
+  Arguments:
+       slip: The total slip across the fault
+      h_lst: List of depths where tau is given (dh should be at least 2^-4)
+    tau_lst: List of relaxation times
+          D: Locking depth (down is negative)
+          x: Distances from the fault
+  '''
+  slip    = float(slip)
+  D       = float(D)
+  h_lst   = np.double(h_lst)
+  tau_lst = np.double(tau_lst)
+  x       = np.double(x)
+  if any(np.diff(h_lst) != np.diff(h_lst)[0]):
+    print('Error: Tau depths must be evenly spaced')
+    return  
+  if any(np.abs(h_lst) < abs(D)):
+    print('Error: Tau depths must be below the locking depth')
+    return
+  dh          = abs(np.diff(h_lst)[0])
+  h_0         = h_lst[0]
+  h_n         = h_lst[-1]
+  h_mid_lst   = h_lst[1:-1]
+  tau_0       = tau_lst[0]
+  tau_n       = tau_lst[-1]
+  tau_mid_lst = tau_lst[1:-1]
+  U           = 0.5 * EM_Cont_Kernel(slip,h_0,tau_0,D,x) * dh 
+  U          += 0.5 * EM_Cont_Kernel(slip,h_n,tau_n,D,x) * dh 
+  for idx,h in enumerate(h_mid_lst):
+    U        += EM_Cont_Kernel(slip,h,tau_mid_lst[idx],D,x) * dh  
+
+  return U   
+
+
+
+##  Elastic-Maxwell Continuous Tau Kernel
+##-------------------------------------------------------------------------------------------
+def EM_Cont_Kernel(slip,h,tau,D,x):
+  '''
+  Description:
+    Postseismic velocity response from a infinitesimally small maxwell layer at 
+    depth
+
+  Arguments:
+    slip: Total displacement across the fault
+       h: Depth of the perturbation
+     tau: Relaxation time of the perturbation
+       D: Locking depth
+       x: Distances from the fault
+  '''
+  slip    = float(slip)
+  h       = float(h)
+  tau     = float(tau)
+  D       = float(D)
+  x       = np.double(x)
+  K1      = x * pow(pi*tau,-1) / ( pow(D - 2*h,2) + np.power(x,2) )
+  K2      = x * pow(pi*tau,-1) / ( pow(D + 2*h,2) + np.power(x,2) )
+  return K1 - K2
+
+
+##  Coefficient Functions
+##-------------------------------------------------------------------------------------------
+def P(l,m,n):
+  N = math.factorial(n+1) * math.factorial(l+m-1)
+  D = math.factorial(l) * math.factorial(n) * math.factorial(l-1) * math.factorial(m)
+  N = float(N)
+  D = float(D)
+  return N / D
+
+def Q(l,m,n):
+  N = math.factorial(n+l) * math.factorial(l+m)
+  D = math.factorial(l) * math.factorial(n) * math.factorial(l) * math.factorial(m)
+  N = float(N)
+  D = float(D)
+  return N / D
+
+def W_EEE(a,b,h2,h3,x,D):
+  W1 = np.arctan( (a*h2 + b*h3 + D) / x)
+  W2 = np.arctan( (a*h2 + b*h3 - D) / x)
+  return W1 - W2  
+
+def W_EE(n,D,x):
+  W1 = np.arctan( (2*n - 1)*D / x )
+  W2 = np.arctan( (2*n + 1)*D / x )
+  return W1 - W2
+
+def L(m,n): 
+  N = math.factorial(m-1)
+  D = ( math.factorial(n-1) * math.factorial(m-n) )
+  N = float(N)
+  D = float(D)
+  return pow(-1,m+n) * N / D
+
+
+# Calculate Decay Constant
+#-------------------------------------------------------------------------------
+def Calc_L(T_top,T_bot,T_avg,X_vec):
+  '''  
+  Description:
+    Finds the decay constant for a depth dependent tau
+    profile given tau_top,tau_bot, and tau_avg
+  Input:
+    T_top   - Tau at the top of the layer
+    T_bot   - Tau at the bottom of the layer
+    T_avg   - Average tau in the layer
+    X_vec   - Array of dimensionless depth from 0 to 1
+  '''
+  X_diff = np.diff(X_vec)
+  L_hi  = 50.0
+  L_lo  = -50.0
+  Tol   = 0.0001
+  if (T_top == T_bot):
+    return float("NaN")
+  while True:    
+    tau_high = Calc_Tau_Layer(T_top,T_bot,L_hi,X_vec)
+    tau_lo = Calc_Tau_Layer(T_top,T_bot,L_lo,X_vec)
+    Mean_hi  = np.sum(X_diff*(tau_high[:-1] + tau_high[1:])/2.0)
+    Mean_lo  = np.sum(X_diff*(tau_lo[:-1] + tau_lo[1:])/2.0)
+    if ((Mean_hi - T_avg) * ( Mean_lo - T_avg) >= 0):
+      print("\nERROR: Average not found within range -50 < L < 50")
+      return
+    L_mid  = (L_hi + L_lo) / 2
+    tau_mid = Calc_Tau_Layer(T_top,T_bot,L_mid,X_vec)
+    Mean_mid  = np.sum(X_diff*(tau_mid[:-1] + tau_mid[1:])/2.0)
+    if (abs(Mean_mid - T_avg) <= Tol):
+      return L_mid
+    if ((Mean_hi - T_avg) * ( Mean_mid - T_avg) < 0):
+      L_lo  = L_mid
+    else:
+      L_hi  = L_mid
+
+# Calculate tau for one layer 
+#-------------------------------------------------------------------------------
+def Calc_Tau_Layer(T_top,T_bot,L,X_vec):
+  '''
+  Description:
+    Outputs depth dependent tau profile
+  Input:
+    T_Top   - Tau at the top of a layer
+    T_bot   - Tau at the bottom of a layer
+    L       - Tau decay constant from Calc_L
+    X_Vec   - Array of dimensionless depths from 0 to 1
+  '''
+  Tol      = 1e-16
+  T_top    = float(T_top)
+  T_bot    = float(T_bot)
+  T_bot    = np.power(10,T_bot)
+  T_top    = np.power(10,T_top)
+  X_vec    = np.array(X_vec)                        
+  Zero_vec = X_vec * 0                                                                                             
+  if (abs(T_top - T_bot) <= Tol): # handling an instability condition                                            
+    Tau_out  = np.log10(T_top) + Zero_vec                                                                     
+  elif (abs(L) <= Tol):           # handling an instability condition                                            
+    Tau_out  = np.log10(T_top + (T_bot - T_top)*X_vec)                                                   
+  else:                                                                                                          
+    Tau  = T_top - ((T_top - T_bot) / (1 - pow((T_bot / T_top),L))) * (1 - np.power( (T_bot/T_top) , (L*X_vec) ))
+    Tau_out  = np.log10(Tau)                                                                       
+  return Tau_out
+
+
+
+# Calculate tau for multiple layers 
+#-------------------------------------------------------------------------------
+def Calc_Tau_Profile(H_Top,H_Bot,T_Top,T_Bot,T_Avg,X_vec):
+  '''     
+  Description: 
+    Generates a tau profile     
+  Arguments: 
+    H_top   - Top of each layer 
+    H_Bot   - Bottom of each layer   
+    Tau_Top - Tau at the top of each layer 
+    Tau_Bot - Tau at the bottom of each layer
+    Tau_Avg - Average tau in each layer 
+    X_vec   - Discretization of depth
+  '''
+  T           = []
+  l_idx       = 'NA'
+  if (X_vec[0] > H_Top[0]) | (X_vec[-1] < H_Bot[-1]):
+    print('X_vec must be between H_Top[0] and H_Bot[1]')
+    return
+  for x in X_vec:
+    for (idx,h) in enumerate(H_Top + [H_Bot[-1]]):
+      if x > h:        
+        if l_idx != idx - 1:
+          l_idx     = idx - 1
+          L         = Calc_L(T_Top[l_idx],T_Bot[l_idx],T_Avg[l_idx],np.arange(0,1,pow(2,-8)))
+        break
+    x_norm    = [(H_Top[l_idx] - x)/(H_Top[l_idx] - H_Bot[l_idx])]
+    T        += list(Calc_Tau_Layer(T_Top[l_idx],T_Bot[l_idx],L,x_norm))
+  return np.array(T)
+
+# Calculate tau for multiple layers 
+#-------------------------------------------------------------------------------
+def Discretize_Tau(Tau_lst,Z,Disc_Z):
+  '''                               
+  Description:                
+    Discretizes a tau profile into layers with tau equal to the      
+    average of the tau profile at that depth interval             
+  Arguments:           
+    Tau_lst - Tau profile           
+    Disc_Z  - Depths of layer boundaries                 
+  '''
+  Disc_Tau    = []
+  Top         = Disc_Z[0]
+  for Bot in Disc_Z[1:]:
+    Cur_Tau   = [Tau_lst[i] for i,z in enumerate(Z) if (z > Bot) & (z <= Top)]
+    Disc_Tau += [round(np.mean(Cur_Tau),2)]
+    Top       = Bot
+  return np.array(Disc_Tau)

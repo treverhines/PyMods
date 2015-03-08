@@ -1,0 +1,10 @@
+{
+"N":"default_name",
+"l":"nodes=1:ppn=1,pmem=1000mb,qos=flux,walltime=1:00:00",
+"q":"flux",
+"A":"ehetland_flux",
+"V":"",
+"M":"hinest@umich.edu",
+"e":"log.err",
+"o":"log.out"
+}

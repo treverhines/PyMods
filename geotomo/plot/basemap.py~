@@ -1,0 +1,28 @@
+#!/usr/bin/env python
+from mpl_toolkits.basemap import Basemap as _Basemap
+import numpy as np
+from netCDF4 import Dataset
+from matplotlib.colors import LightSource
+import matplotlib.cm
+from pegtop import set_shade
+
+class Basemap(_Basemap):
+  def drawtopography(self,resolution=200,cmap=matplotlib.cm.gray,**kwargs):
+    url = 'http://ferret.pmel.noaa.gov/thredds/dodsC/data/PMEL/etopo1.nc'
+    etopodata = Dataset(url)
+    lons = etopodata.variables['x'][:]
+    lats = etopodata.variables['y'][:]
+    xidx = (lons > self.lonmin) & (lons < self.lonmax)
+    yidx = (lats > self.latmin) & (lats < self.latmax)
+    lons = lons[xidx]
+    lats = lats[yidx]
+    topoin = etopodata.variables['rose'][yidx,xidx]
+    nx = int((self.xmax-self.xmin)/resolution)+1
+    ny = int((self.ymax-self.ymin)/resolution)+1
+    topodat = self.transform_scalar(topoin,lons,lats,nx,ny,order=3)
+    #ls = LightSource(azdeg = 270,altdeg = 80)
+    rgb = set_shade(topodat,cmap=cmap,scale=10.0,azdeg=180.0,altdeg=45.0)
+    self.imshow(rgb,**kwargs)
+
+
+  
