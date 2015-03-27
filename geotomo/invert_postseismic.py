@@ -10,7 +10,6 @@ import inverse
 import slip_functions
 
 ##-------------------------------------------------------------------------------
-@misc.funtime
 def rotate_slip_direction(M,rotation_list,inverse=False):
   '''
   PARAMETERS
@@ -49,7 +48,6 @@ def rotate_slip_direction(M,rotation_list,inverse=False):
   return M_rotated
   
 ##-------------------------------------------------------------------------------
-@misc.funtime
 def system(slip_parameters,visc_parameters,F,G,slip_func,t):
   '''
   I: number of slip parameters describing slip on each fault patch       
@@ -71,7 +69,6 @@ def system(slip_parameters,visc_parameters,F,G,slip_func,t):
   return elastic + viscous  
 
 ##-------------------------------------------------------------------------------
-@misc.funtime
 def jacobian(slip_parameters,visc_parameters,F,G,slip_func,slip_jac,t):
   '''
   I: number of slip parameters describing slip on each fault patch       
@@ -176,7 +173,6 @@ def jacobian_wrapper(parameters,F,G,slip_func,slip_jac,t,slip_parameter_shape):
   return out
 
 ##-------------------------------------------------------------------------------
-@misc.funtime
 def regularization_matrix(slip_parameter_shape,
                           visc_no,
                           patch_connectivity,

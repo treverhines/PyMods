@@ -5,11 +5,13 @@ import os
 import numpy as np
 import logging
 from functools import wraps
-
 logger = logging.getLogger(__name__)
 
-##------------------------------------------------------------------------------
+
 def decyear_inv(decyear,format='%Y-%m-%dT%H:%M:%S'):
+  '''
+  convert decimal year to date
+  '''
   year = int(np.floor(decyear))
   remainder = decyear - year
   year_start = datetime.datetime(year,1,1)
@@ -19,8 +21,11 @@ def decyear_inv(decyear,format='%Y-%m-%dT%H:%M:%S'):
   date = year_start + datetime.timedelta(days=decdays)
   return date.strftime(format)
 
-##------------------------------------------------------------------------------
+
 def decyear(*args):
+  '''
+  converts date to decimal year
+  '''
   date_tuple      = datetime.datetime(*args).timetuple()
   time_in_sec     = timemod.mktime(date_tuple)
   date_tuple      = datetime.datetime(args[0],1,1,0,0).timetuple()
@@ -31,7 +36,7 @@ def decyear(*args):
                      /(time_year_end - time_year_start))
   return decimal_time
 
-##------------------------------------------------------------------------------
+
 class Timer:
   def __init__(self):
     self.time_dict = {'init':timemod.time()}
@@ -60,35 +65,32 @@ class Timer:
     disp_runtime = '%.4g %s' % (runtime*conversion,unit)
     return 'elapsed time for %s: %s' % (ID,disp_runtime)
 
-##------------------------------------------------------------------------------
 def funtime(fun):
   '''
   decorator which times a function
   '''
   @wraps(fun)
   def subfun(*args,**kwargs):
-    logger.debug('evaluating %s' % fun.__name__)
+    logger.info('evaluating %s' % fun.__name__)
     t = Timer()
     t.tic(fun.__name__)
     out = fun(*args,**kwargs)
-    logger.debug(t.toc(fun.__name__))
+    logger.info(t.toc(fun.__name__))
     return out
   return subfun
 
-##------------------------------------------------------------------------------
-def baseN_to_base10(value_baseN,N):
-  base_char = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-  assert len(base_char) >= N
+
+def _baseN_to_base10(value_baseN,base_char):
+  N = len(base_char)
   value_baseN = str(value_baseN)
   base_char = base_char[:N]
   assert all(i in base_char for i in value_baseN)
   value_base10 = sum(base_char.find(i)*N**(n) for (n,i) in enumerate(value_baseN[::-1]))
   return value_base10  
 
-##------------------------------------------------------------------------------
-def base10_to_baseN(value_base10,N):
-  base_char = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-  assert len(base_char) >= N
+
+def _base10_to_baseN(value_base10,base_char):
+  N = len(base_char)
   value_baseN = ""
   while value_base10 != 0:
     value_baseN = base_char[value_base10%N] + value_baseN
@@ -97,13 +99,57 @@ def base10_to_baseN(value_base10,N):
     value_baseN = base_char[0]
   return value_baseN
 
-##------------------------------------------------------------------------------
+
 def baseN_to_baseM(value_baseN,N,M):
-  value_base10 = baseN_to_base10(value_baseN,N)
-  value_baseM = base10_to_baseN(value_base10,M)
+  '''
+  converts an integer in base N to a value in base M
+
+  PARAMETERS
+  ----------
+    value_baseN: (integer or string) the integer value in base N whose 
+      characters must be a subset of the input base characters. If all the 
+      characters in this value are 0-9 then an integer can be given, otherwise, 
+      it must be a string.
+
+    N: (integer or string): Specifies the input base characters. if N is an 
+      integer then the base characters will be DEFAULT_CHARACTERS[:N]. Or the 
+      base characters can be specified as a string. For example, specifying N 
+      as '0123456789ABCDEF' will cause the input value to be treated as 
+      hexidecimal. Alternatively, specifying N as 16 will cause the input to be 
+      treated as hexidecimal.
+
+    M: (integer or string): Base of the output value. 
+
+  RETURNS
+  -------
+    value_baseM: a string of value_baseN converted to base M
+
+
+  DEFAULT_CHARACTERS='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+
+  '''
+  DEFAULT_CHARACTERS='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+  assert (type(N) == int) | (type(N) == str)
+  assert (type(M) == int) | (type(M) == str)
+  if type(N) is int:
+    assert len(DEFAULT_CHARACTERS) >= N,(
+      'integer values of N and M must be %s or smaller' %len(DEFAULT_CHARACTERS)) 
+    baseN_char = DEFAULT_CHARACTERS[:N]
+  else:
+    baseN_char = N
+
+  if type(M) is int:
+    assert len(DEFAULT_CHARACTERS) >= M, (
+      'integer values of N and M must be %s or smaller' %len(DEFAULT_CHARACTERS)) 
+    baseM_char = DEFAULT_CHARACTERS[:M]
+  else:  
+    baseM_char = M
+      
+  value_base10 = _baseN_to_base10(value_baseN,baseN_char)
+  value_baseM = _base10_to_baseN(value_base10,baseM_char)
   return value_baseM
   
-##------------------------------------------------------------------------------
+
 def timestamp(factor=1.0):
   '''
   Description:
@@ -113,7 +159,7 @@ def timestamp(factor=1.0):
   value_base10 = int(timemod.time()*factor)
   return baseN_to_baseM(value_base10,10,36)
 
-##------------------------------------------------------------------------------
+
 def list_flatten(lst):
   lst = list(lst)
   out = []
@@ -124,7 +170,7 @@ def list_flatten(lst):
       out.append(sub)
   return np.array(out)
 
-##------------------------------------------------------------------------------
+
 def divide_list(lst,N):
   '''                               
   Splits a list into N groups as evenly as possible         
@@ -136,7 +182,7 @@ def divide_list(lst,N):
     out[itr%N] += [l]
   return out
 
-##------------------------------------------------------------------------------
+
 def rotation3D(argZ,argY,argX):
   '''                                
   creates a matrix which rotates a coordinate in 3 dimensional space about the 
@@ -155,7 +201,7 @@ def rotation3D(argZ,argY,argX):
                  [           0.0,  np.sin(argX),  np.cos(argX)]])
   return R1.dot(R2.dot(R3))
 
-##------------------------------------------------------------------------------
+
 def find_indices(domain,realizations):
   '''  
   returns an array of indices such that domain[indices[n]] == realizations[n]
@@ -180,7 +226,7 @@ def find_indices(domain,realizations):
   indices = [domain.index(r) for r in realizations]
   return indices
 
-##------------------------------------------------------------------------------
+
 def pad(M,pad_shape,value=0,dtype=None):
   '''
   returns an array containing the values from M but the ends of each dimension
@@ -209,7 +255,7 @@ def pad(M,pad_shape,value=0,dtype=None):
 
   return out
 
-##------------------------------------------------------------------------------
+
 def pad_stack(arrays,axis=0,**kwargs):
   '''
   stacks array along the specified dimensions and any inconsistent dimension
